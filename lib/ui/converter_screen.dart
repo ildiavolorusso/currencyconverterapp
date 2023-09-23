@@ -1,8 +1,8 @@
 import 'package:currencyconverterapp/data/api_services/api_services.dart';
 import 'package:currencyconverterapp/data/data_classes_database/rates_local/rates_local.dart';
 import 'package:currencyconverterapp/data/database_services/database_services.dart';
-import 'package:currencyconverterapp/locale_strings.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:currencyconverterapp/data/const/locale_strings.dart';
+import 'package:currencyconverterapp/logic/calculation.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
@@ -44,8 +44,7 @@ class ConverterScreenState extends State<ConverterScreen> {
     Map<int?, AvailableCurrencies?> response =
         await ApiServices().getAvailableCurrencies();
     //интернет-соединение есть или данные успешно обновлены
-    if (response.entries.single.key != null) {
-      if (response.entries.single.key == 200) {
+    if (response.entries.single.value != null) {
         for (var element in response.entries.single.value!.currencies.keys) {
           _availableCurrenciesList
               .add(DropdownMenuItem(value: element, child: Text(element)));
@@ -53,10 +52,8 @@ class ConverterScreenState extends State<ConverterScreen> {
         databaseServices.writeAvailableCurrencies(
             response.entries.single.value!.currencies.keys.toList());
       } else {
-        showError(response.entries.single.key!);
-      }
-    } else {
       //нет подключения или от сервера пришла ошибка
+      showError(response.entries.single.key);
       getLocalAvailableCurrencies();
     }
     setState(() {
@@ -78,26 +75,23 @@ class ConverterScreenState extends State<ConverterScreen> {
     Map<int?, Rates?> response =
         await ApiServices().getRates(_selectedSendValue!, _selectedGetValue);
     //интернет-соединение есть или данные успешно обновлены
-    if (response.entries.single.key == 200) {
+    if (response.entries.single.value != null) {
       double currentRate = response.entries.single.value!.rates.entries
           .firstWhere((element) => element.key == _selectedGetValue)
           .value;
+      //текущая ставка для выбранных валют сохранена
       databaseServices.updateRateForCurrency(_selectedGetValue!, currentRate);
-      calculation(currentRate);
+      _getController.text = Calculation(sendValue: double.parse(_sendController.text), rate: currentRate).getResult().toString();
     } else {
       //нет подключения или от сервера пришла ошибка
-      showError(response.entries.single.key ?? null);
+      _getController.clear();
+      showError(response.entries.single.key);
     }
   }
 
   showError(int? errorCode) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-        errorCode == null ? 'Error' : 'Error code: $errorCode')));
-  }
-
-  void calculation(double rate) {
-    _getController.text =
-        (double.parse(_sendController.text) * rate).toString();
+        errorCode == null ? LocaleStrings.unexpectedErrorLabel : LocaleStrings.errorCodeLabel + errorCode.toString())));
   }
 
   @override
@@ -123,8 +117,7 @@ class ConverterScreenState extends State<ConverterScreen> {
                             onChanged: (amount) {
                               if(_sendController.text.isEmpty){
                                 _getController.clear();
-                              }
-                              if(_sendController.text.isNotEmpty && _selectedSendValue != null && _selectedGetValue != null){
+                              } else if(_selectedSendValue != null && _selectedGetValue != null){
                                 getRates();
                               }
                             },
